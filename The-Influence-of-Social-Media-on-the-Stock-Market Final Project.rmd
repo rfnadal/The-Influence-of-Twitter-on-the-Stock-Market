@@ -1,0 +1,264 @@
+---
+title: "The Influence of Twitter on the Stock Market"
+author: "Rolando Franqui and Connor Brown"
+date: "5/1/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In recent years, social media has become a big part of our daily lives; it affects how we communicate with others, our jobs and the economy. With social media platforms such as YouTube, Facebook, and Twitter becoming extremely popular, people are allowed to express and share information that might not be necessarily accurate or merely just an opinion; however, having such a wide reach can affect many areas significantly. The goal of our research project is to see to what extent social media (specifically twitter) has affected the behavior of traders and the economy, despite being in the midst of an economic crisis. To analyze the tweets we used sentimental analysis, we will calculate the mean sentiment of the day and compare it to the adjusted close price of the S&P 500 Index we used as our metric for market performance. 
+
+### Data collection
+
+We first started by manually searching twitter using the built in search engine by passing in keywords that we might be able to use to gather market data. This was an extremly useful part of the process because it gave us an idea of what kind of data the queries could bring us. This process helped us eliminate queries that would add substancial noise to our data due to ads or unrelated tweets that that query gathered. We eventually settled on 8 different queries. WIth the use that we gathered using the following queries: "S&P500", "Economy", "SPY","VOO", "Stimulus Check", "Crude Oil", "Stock Market", "Recession." From this sentiment analysis, we will calculate the mean sentiment of the day and compare it to the adjusted close price of the S&P 500 Index we used as our metric for market performance. 
+
+### Getting a Sense of the Data
+
+```{code include=FALSE}
+# Please Set Working Directory to Root Folder of the Project File
+setwd(choose.dir())
+```
+
+
+```{r imports, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+### Import the necessary libraries
+library(tm) #Cleaning the Tweets
+library(wordcloud)#Creating the wordCloud
+library(syuzhet)#Sentiment Analysis
+library(sentimentr)
+library(lubridate)#Sentiment Analysis
+library(ggplot2) #Plotting
+library(scales)#Plotting
+library(reshape2)#Plotting
+library(dplyr)#Plotting
+library(gridExtra)#Joining graphs together
+library(SnowballC)#Creating the wordCloud
+library(RColorBrewer)#Creating the wordCloud
+```
+
+
+To get a better understanding of the data, we created a word cloud of the most popular words from the tweets we collected from the past four months. The words that are shown here have a frequency of at least a hundred inside our collected tweets. Some of the terms that caught our eye were 'Trump', 'Obama', 'Coronavirus', 'Covid', 'Unemployment', 'China', 'Virus', 'Fall', and 'News'. While none of these were keywords used to scrape the tweets, they do represent the current climate in society, and show what current events might have an effect on the market.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+##Read the Data
+tweetsDF <- read.csv("alltweets.csv")
+tweetsDF <- data.frame(tweetsDF)
+# Calculate cleanTweets
+
+tweetsDF.cleanTweets <- Corpus(VectorSource(tweetsDF$Text))
+#Cleaning the 'cleanTweets'
+cleanTweets <- tm_map(tweetsDF.cleanTweets, PlainTextDocument)
+cleanTweets <- tm_map(tweetsDF.cleanTweets,content_transformer(tolower))
+cleanTweets <- tm_map(cleanTweets,removeNumbers)
+cleanTweets <- tm_map(cleanTweets,removeWords,stopwords("english"))
+cleanTweets <- tm_map(cleanTweets,removePunctuation)
+cleanTweets <- tm_map(cleanTweets,stripWhitespace)
+cleanTweets <- tm_map(cleanTweets,stemDocument)
+cleanTweets <- tm_map(cleanTweets, removeWords, c("spy","oil","that","the","dont","economi","crude"))
+cleanTweets <- tm_map(cleanTweets, removeWords, c(""))
+cleanTweets <- tm_map(cleanTweets, removeWords, c("pips","audusd"," youtube "," too"," best","some","lol","how","line"," you","your","was", "stock","market","recess","spi", "stock market"))
+cleanTweets <- tm_map(cleanTweets, removeWords, c("know","since","were","out","the","this","was","are","today", "your","have","like","has"))
+cleanTweets <- tm_map(cleanTweets, removeWords, c("have", "will","who","all","them","their", "you","they","was","other","year","have", "but"))
+cleanTweets <- tm_map(cleanTweets, removeWords, c("that","after","has","with",
+                                          "from","just"))
+
+```
+
+```{r wordcloud, echo=FALSE, message=FALSE, warning=FALSE}
+wordcloud(words = cleanTweets, min.freq = 100,
+          max.words = 300, random.order = F,
+          colors = brewer.pal(8, "Dark2"))
+```
+
+
+### Performing sentiment analysis
+
+Sentiment analysis is a type of data mining that measures the inclination of people's opinions through natural language processing (NLP), computational linguistics and text analysis, which are used to extract and analyze subjective information from Social Media or other mediums such as text documents. In this case we are using it to analyze the sentiments of the tweets we collected. In the figure below we created a barplot of the sentiment of the tweets brokendown in columns these include one for each emotion type as well as a positive or negative valence. The ten columns are as follows: "anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust", "negative", "positive."
+
+The most prevalent emotion seemed to be trust, and the most common sentiment seemed to be negative. The emotions seemed to be reasonably balanced, most probably due to the market being at an almost all-time high at the beginning of the year and then going on a very steep decline towards the second half of our data. This leads to to belive there is a correlation between the market and our twitter data.
+
+Sentiment BarPlot:
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+##Getting the Data
+tweets <- read.csv("alltweets.csv")
+tweets2 <- iconv(tweets$Text, to = "utf-8")
+
+# Obtain Sentiment Scores
+sent <- get_nrc_sentiment(tweets2)
+
+##Extract Sentiment Terms
+terms <- extract_sentiment_terms(tweets2)
+
+bar <- barplot(colSums(sent), horiz = T, xlab = 'Number of Tweets', main = "Average Sentiment Scores during the span of the past Four Months",las=2)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# S&P 500 Calculations
+
+## Read in S&P 500 Stocks from January 1, 2020 to April 22, 2020 as a data frame
+stocks <- read.csv("SNP500_Data.csv", header = T)
+stocks$Date <- as.character(stocks$Date)
+stocks$Date <- ymd(stocks$Date)
+
+## Create time series of S&P 500
+stocks.plot <- ggplot(data = stocks, aes(x = Date, y = Adj.Close)) + geom_path() +
+               labs(x = "Date (Month)", y = "Adjusted Closing Price ($)", title = "S&P 500 Index Performance") + 
+               scale_x_date(date_breaks = "10 day",labels = date_format("%m-%d"), limits = as.Date(c("2020-01-01","2020-04-24")))
+
+## Creates time series with a smooth ggplot2 line
+stocks.plot.sm <- ggplot(data = stocks, aes(x = Date, y = Adj.Close)) + geom_path() + geom_smooth(method = "auto", se = T, level = .95) +
+                  labs(x = "Date (Month)", y = "Adjusted Closing Price ($)", title = "S&P 500 Index Performance") + 
+                  scale_x_date(date_breaks = "10 day",labels = date_format("%m-%d"), limits = as.Date(c("2020-01-01","2020-04-24")))
+```
+
+### Unsmoothed Stock Market Performance
+
+The graph below is a time series of the performance of the S&P 500 Index, our metric for market performance during the past four months. We can see that the market behaved in a reasonably consistent manner during January and February. However, as the COVID-19 pandemic erupted near the end of February, coronavirus cases rapidly increased, and unemployment numbers rose; the market took a very sharp hit and went down to its lowest point in the last two months. We can see an increase again, most probably due to the talks of stimulus packages and increased testing across the United States. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+print(stocks.plot)
+```
+
+### Smoothed Stock Market Performance
+
+To be able to better understand the trend we applied a smoothing parameter to the graph. Here's the output. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+print(stocks.plot.sm)
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+##Creating a list of the average daily sentiment of Twitter Users during the time-frame
+setwd("Tweets")
+temp = list.files(pattern="*.csv")
+
+## Creates vector, fills vector with average sentiments of each day
+average_sents <- c()
+for (i in 1:length(temp)) {
+    ## Read in day 'i' tweets
+    tweets.df <- read.csv(temp[i], header = T, row.names = NULL,)
+    tweets.df <- as.character(tweets.df$Text)
+    
+    ## Converts text to numeric sentiment values, averages them and inputs into vector
+    sentiments.final <- get_sentiment(tweets.df)
+    average <- mean(sentiments.final)
+    average_sents <- c(average_sents, average)
+}
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+##Creates data frame with sentiments and dates
+average.df <- as.data.frame(average_sents)
+average.df$Dates <- stocks$Date
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+## Creates time series of average sentiments
+sentiment.plot <- ggplot(data = average.df, aes(x = Dates, y = average_sents)) + geom_path() +
+                  labs(x = "Date (Month)", y = "Sentiment (Positive/Negative)", title = "Positive/Negative Sentiment") + 
+                  scale_x_date(date_breaks = "10 day",labels = date_format("%m-%d"), limits = as.Date(c("2020-01-01","2020-04-24")))
+
+## Creates time series with ggplot2 line and applies smmothing
+sentiment.plot.sm <- ggplot(data = average.df, aes(x = Dates, y = average_sents)) + geom_path() + geom_smooth(method = "auto", se = T, level = .95) +
+                     labs(x = "Date (Month)", y = "Sentiment (Positive/Negative)", title = "Positive/Negative Sentiment") + 
+                     scale_x_date(date_breaks = "10 day",labels = date_format("%m-%d"), limits = as.Date(c("2020-01-01","2020-04-24")))
+
+```
+
+### Market Performance vs Sentiment Analysis
+
+To better observe if market performance was in line with the sentiment corresponding to the same date, we calculated the mean sentiment of every day of tweets using sentiment analysis. We plotted the results in a time series and displayed it next to the stock's performance and making the dates line up (Figure Below). What we observed when we did this is that, in fact, the sentiments correlated with the market performance. We also saw that twitter is reacting to current events. We can extrapolate this because the significant changes in sentiment seem to happen a day after a significant difference in the stock market performance. 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## Arranges both time series (without smooth lines)
+grid.arrange(stocks.plot, sentiment.plot, nrow = 2, ncol = 1)
+
+
+```
+
+#### Smoothed Version 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## Arranges both time series (with smooth lines)
+grid.arrange(stocks.plot.sm, sentiment.plot.sm, nrow = 2, ncol = 1)
+
+```
+
+### Scatter Plot 
+To better see the correlation, we created a Scatter plot. Each dot in the plot represents the sentiment for a specific day and the closing price. We can see that, on days with more negative tweets (negative sentiment), the stock market's prices fall, and vice versa. This further defends our hypothesis that tweets have a predictive effect on the market.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+reg.plot <- plot(average.df$average_sents, stocks$Adj.Close, ylab = "Adjusted Stock Closing Price", xlab = "Average Sentiment Correlated with Closing Price")
+```
+
+### Correlation between Average Sentiment and Adjusted Closing Price
+
+We calculated the correlation between average sentiment and adjusted closing price using Pearson correlation, which measures a linear dependence between two variables (x and y). It’s also known as a parametric correlation test because it depends on the distribution of the data. The equation is the following $r = \frac{\sum{(x-m_x)(y-m_y)}}{\sqrt{\sum{(x-m_x)^2}\sum{(y-m_y)^2}}}$
+
+After Running the correlation test we can see from our low P-Value of 1.811e-05 and our correlation of 0.46 that there's a moderate postive, moderate correlation between the stock closing price and the twitter sentiment of that day. As sentiment market closing price increases so does the mean sentiment value. 
+
+####Correlation Output
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(average.df$average_sents, stocks$Adj.Close,method = c("pearson") )
+```
+### Creating a linear model 
+
+A linear regression model is a model that assumes a linear relationship between the input variables (x) and the single output variable (y) Example: $Y = B0 + B1*x$.   
+
+Our linear model is summed up in the following equation $Closing Price = a(Intercept) + Avg Sentiment of Day × b1$. So if we were to assume that in a random day the Avgerage sentiment is -.30, we would expect the closing price to be on average around 2746.538. The equation would look the follwing way $3070.67 + (1080.44 + -0.30) = 2746.53$. If we look at our R-Squared Value of 0.20, this means our model can account for 20 percent of the variance exhibited in the data. This is not exceptional but acceptable in our view due to the fact that we only have a single predictor variable in an extremely unpredictable market segment. 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fit2 <- lm(stocks$Adj.Close ~ average.df$average_sents)
+summary(fit2)
+```
+
+### Attempting to Predict the Market with Twitter Data
+
+After we assessed the correlation between the S&P 500 Index and Twitter sentiment, we used the data to try to predict the index price. To make these predictions, we utilized our linear model and the sentiments exhibited during the tweets in April to obtain the predicted index closing price at each corresponding market day.We created a testing data set, which includes a subset of the data containing the mean sentiments and adjusted closing prices from the month of March, and we ran it against a testing set ,which was a subset of our data containing the sentiments of April. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+## Created a linear model based on March Stocks and Sentiments
+fit1 <- lm(stocks$Adj.Close[c(41:62)] ~ average.df$average_sents[c(41:62)])
+
+## Predict and plot April stock volatility using March-based model.
+pred1 <- predict(object = fit1, newdata = data.frame(average.df$average_sents[63:77]))
+
+pred.df <- as.data.frame(pred1)
+pred.df$Dates <- stocks$Date[63:84]
+
+pred.plot <- ggplot(data = pred.df, aes(x = Dates, y = pred1)) + geom_path() + geom_smooth(method = "auto", se = T, level = .95) +
+             labs(x = "Date (Month)", y = "Predicted Adj. Close", title = "March Splice Prediction") + 
+             scale_x_date(date_breaks = "10 day",labels = date_format("%m-%d"), limits = as.Date(c("2020-01-01","2020-04-24")))
+```
+
+#### Graphed prediction side by side with Index Performance.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## Display both actual and predicted stocks to allow comaprison
+grid.arrange(stocks.plot.sm, pred.plot, nrow=2, ncol=1)
+```
+### Model Performance
+
+After analyzing the model, we came to the following conclusions. From our obtained R-Squared Value, our model can only account for 5 percent of the variance and has a P-Value of 0.152, meaning our findings are not very accurate. This can be attributed to the extremely volatile market we have seen during the past two months. We observe the market shapely rising in April while it was crashing in march. This and the fact that we are only using one variable as a predictor could explain the lack of accuracy in our model. 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+summary(fit1)
+```
+
+
+## Conclusion
+
+In closing, we discovered that there is, in fact, a moderate correlation between daily tweet sentiment and stock market closing price. Through a step-by-step plan of 1.) Web scraping tweets related to the market using a Python script, 2.) using word processing methods to find words that exhibit sentiment, 3.) using these words to calculate a value of positive or negative sentiment towards the market, and 4.) comparing each day's sentiment to its corresponding day's adjusted closing price in S&P 500, we found a correlation between daily tweet sentiment and stock market adjusted closing price differences. After the fact, we attempted to use these discoveries to predict S&P 500 Index closing prices based on daily twitter sentiment. Using the month of March as a training set, we created a linear model and used it to predict adjusted closing prices for April, with inconclusive results. When we compared the predicted April prices to the actual data we had, we found a p-value of just below .05, which, while technically significant, led us to believe that we do not have enough parameters to predict prices accurately. The predicted prices are not exceptionally poor but are not enough to be called an accurate prediction method. We believe that the use of more sentimental analysis from other websites, such as news headings, Facebook, and other sources with the addition of multiple linear regression, could further propel these predictions closer to the actual data.
